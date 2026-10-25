@@ -1,0 +1,86 @@
+- name: Provision web tier
+  hosts: webservers
+  become: true
+  vars:
+    app_port: 8080
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+  roles:
+    - common
+    - role: nginx
+      vars:
+        worker_processes: auto
+
+  tasks:
+    - name: Install runtime packages
+      ansible.builtin.apt:
+        name: [python3, python3-venv, git]
+        state: present
+
+    - name: Check for existing release
+      ansible.builtin.stat:
+        path: /opt/app/current
+      register: release
+
+    - name: Deploy application
+      block:
+        - name: Clone repository
+          ansible.builtin.git:
+            repo: https://github.com/example/app.git
+            dest: /opt/app/current
+            version: main
+          when: not release.stat.exists
+          notify: restart app
+
+        - name: Render systemd unit
+          ansible.builtin.template:
+            src: app.service.j2
+            dest: /etc/systemd/system/app.service
+          notify:
+            - reload systemd
+            - restart app
+      rescue:
+        - name: Report failure
+          ansible.builtin.debug:
+            msg: Deploy failed, rolling back
+
+    - name: Run migrations
+      ansible.builtin.command: /opt/app/current/bin/migrate
+
+    - name: Open firewall
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+      with_items: ["{{ app_port }}", 443]
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: restart app
+      ansible.builtin.service:
+        name: app
+        state: restarted
+
+    - name: restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+
+- name: Verify
+  hosts: webservers
+  tasks:
+    - name: Wait for app port
+      ansible.builtin.wait_for:
+        port: 8080
+        timeout: 60
+    - name: Smoke test
+      ansible.builtin.uri:
+        url: http://localhost:8080/health
+      notify: page oncall

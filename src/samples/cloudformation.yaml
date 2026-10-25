@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Serverless API — API Gateway → Lambda → DynamoDB, with a queue for async jobs
+
+Parameters:
+  Stage:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+    Default: dev
+  TableReadCapacity:
+    Type: Number
+    Default: 5
+  AlertEmail:
+    Type: String
+    Description: Where alarms go
+
+Conditions:
+  IsProd: !Equals [!Ref Stage, prod]
+
+Mappings:
+  StageConfig:
+    dev: { MemorySize: 256 }
+    staging: { MemorySize: 512 }
+    prod: { MemorySize: 1024 }
+
+Resources:
+  ItemsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'items-${Stage}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+  JobsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt JobsDLQ.Arn
+        maxReceiveCount: 5
+
+  JobsDLQ:
+    Type: AWS::SQS::Queue
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: data
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, sqs:SendMessage]
+                Resource:
+                  - !GetAtt ItemsTable.Arn
+                  - !GetAtt JobsQueue.Arn
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: app.handler
+      Role: !GetAtt ApiRole.Arn
+      MemorySize: !FindInMap [StageConfig, !Ref Stage, MemorySize]
+      Environment:
+        Variables:
+          TABLE: !Ref ItemsTable
+          QUEUE_URL: !Ref JobsQueue
+      Code:
+        ZipFile: |
+          def handler(event, context):
+              return {"statusCode": 200}
+
+  WorkerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: worker.handler
+      Role: !GetAtt ApiRole.Arn
+      Code: { ZipFile: 'def handler(e, c): pass' }
+
+  WorkerEventSource:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt JobsQueue.Arn
+      FunctionName: !Ref WorkerFunction
+      BatchSize: 10
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub 'items-api-${Stage}'
+      ProtocolType: HTTP
+      Target: !GetAtt ApiFunction.Arn
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+  ErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsProd
+    DependsOn: ApiFunction
+    Properties:
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ApiFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions: [!Ref AlertTopic]
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: IsProd
+    Properties:
+      Subscription:
+        - Endpoint: !Ref AlertEmail
+          Protocol: email
+
+Outputs:
+  ApiUrl:
+    Value: !GetAtt HttpApi.ApiEndpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+  TableName:
+    Value: !Ref ItemsTable
