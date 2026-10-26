@@ -7,6 +7,8 @@ export default defineConfig({
   preview: { port: 5792, strictPort: true },
   build: {
     chunkSizeWarningLimit: 1200,
+    // AWS icons stay separate files: ~300 of them, fetched only when a node uses one.
+    assetsInlineLimit: (file) => (file.includes('aws-icons') ? false : undefined),
     rollupOptions: {
       output: {
         manualChunks: {
