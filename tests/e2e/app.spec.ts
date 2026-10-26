@@ -371,6 +371,24 @@ test.describe('chrome', () => {
   });
 });
 
+test.describe('seo', () => {
+  test('ships title, description, social cards, structured data and manifest', async ({ page, request }) => {
+    await page.goto('/');
+    await expect(page).toHaveTitle(/Kachua/);
+    const meta = (sel: string) => page.locator(sel).first().getAttribute('content');
+    expect((await meta('meta[name="description"]'))!.length).toBeGreaterThan(80);
+    expect(await meta('meta[property="og:title"]')).toContain('Kachua');
+    expect(await meta('meta[property="og:image"]')).toMatch(/og-image\.png$/);
+    expect(await meta('meta[name="twitter:card"]')).toBe('summary_large_image');
+    expect(await page.locator('link[rel="canonical"]').getAttribute('href')).not.toContain('%VITE_SITE_URL%');
+    const ld = JSON.parse((await page.locator('script[type="application/ld+json"]').textContent())!);
+    expect(ld['@type']).toBe('SoftwareApplication');
+    for (const path of ['/og-image.png', '/site.webmanifest', '/robots.txt', '/apple-touch-icon.png', '/icon-512.png'])
+      expect((await request.get(path)).status(), path).toBe(200);
+    expect((await (await request.get('/site.webmanifest')).json()).short_name).toBe('Kachua');
+  });
+});
+
 test.describe('mobile', () => {
   test.use({ viewport: { width: 390, height: 844 } });
   test('switches between source and graph', async ({ page }) => {

@@ -2,11 +2,75 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Kachua — Visualize Terraform, CloudFormation, Ansible &amp; OpenTelemetry</title>
+    <meta name="description" content="Kachua turns infrastructure-as-code into a live, explorable architecture diagram. Paste Terraform, CloudFormation, Ansible or OpenTelemetry Collector config and see dependencies, lint issues and blast radius instantly — all in your browser." />
+    <meta name="keywords" content="infrastructure as code visualizer, terraform visualizer, terraform graph, cloudformation visualizer, cloudformation diagram, ansible playbook visualizer, opentelemetry collector config, otel pipeline, aws architecture diagram, iac diagram, devops tools, config linter" />
+    <meta name="author" content="Faizullah" />
+    <meta name="application-name" content="Kachua" />
+    <meta name="generator" content="Kachua" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="theme-color" content="#08080a" />
-    <meta name="description" content="Kachua — paste OpenTelemetry, CloudFormation, Terraform or Ansible config and watch it become a live architecture graph." />
+    <meta name="color-scheme" content="dark" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="canonical" href="%VITE_SITE_URL%/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kachua" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="%VITE_SITE_URL%/" />
+    <meta property="og:title" content="Kachua — IaC, made visible" />
+    <meta property="og:description" content="Paste Terraform, CloudFormation, Ansible or OpenTelemetry config and get a live architecture diagram with dependency tracing, linting and blast radius." />
+    <meta property="og:image" content="%VITE_SITE_URL%/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Kachua rendering a CloudFormation stack as an architecture diagram grouped into service lanes" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kachua — IaC, made visible" />
+    <meta name="twitter:description" content="Live architecture diagrams from Terraform, CloudFormation, Ansible and OpenTelemetry config. Runs entirely in your browser." />
+    <meta name="twitter:image" content="%VITE_SITE_URL%/og-image.png" />
+    <meta name="twitter:image:alt" content="Kachua rendering a CloudFormation stack as an architecture diagram" />
+
+    <!-- Icons & PWA -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Kachua — IaC, made visible</title>
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="Kachua" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Kachua",
+        "alternateName": "Kachua IaC Visualizer",
+        "applicationCategory": "DeveloperApplication",
+        "applicationSubCategory": "Infrastructure as Code",
+        "operatingSystem": "Any (web browser)",
+        "url": "%VITE_SITE_URL%/",
+        "image": "%VITE_SITE_URL%/og-image.png",
+        "description": "Kachua turns Terraform, CloudFormation, Ansible and OpenTelemetry Collector configuration into a live, explorable architecture diagram with dependency tracing, linting and blast-radius analysis. Everything runs locally in the browser.",
+        "featureList": [
+          "Terraform HCL dependency graph",
+          "CloudFormation intrinsic function resolution (Ref, GetAtt, Sub, FindInMap)",
+          "Ansible playbook flow with handlers and registered variables",
+          "OpenTelemetry Collector pipeline visualization",
+          "Architecture view grouped by service family with AWS icons",
+          "Inline linting and blast-radius analysis",
+          "Shareable links and PNG / Mermaid export"
+        ],
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Faizullah" }
+      }
+    </script>
     <style>
       /* Pre-React loader: shown while the bundle downloads. Mirrors <BootIntro/> so the hand-off is seamless. */
       html, body { margin: 0; height: 100%; background: #08080a; }
@@ -57,6 +121,16 @@
         </div>
       </div>
     </div>
+    <noscript>
+      <main style="font-family: system-ui, sans-serif; color: #ededf0; max-width: 640px; margin: 15vh auto; padding: 0 24px; line-height: 1.6">
+        <h1>Kachua — IaC, made visible</h1>
+        <p>
+          Kachua turns Terraform, CloudFormation, Ansible and OpenTelemetry Collector configuration into a live, explorable architecture
+          diagram, with dependency tracing, linting and blast-radius analysis. It runs entirely in your browser.
+        </p>
+        <p>Please enable JavaScript to use Kachua.</p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
