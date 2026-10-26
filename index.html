@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#08080a" />
+    <meta name="description" content="Kachua — paste OpenTelemetry, CloudFormation, Terraform or Ansible config and watch it become a live architecture graph." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Kachua — IaC, made visible</title>
+    <style>
+      /* Pre-React loader: shown while the bundle downloads. Mirrors <BootIntro/> so the hand-off is seamless. */
+      html, body { margin: 0; height: 100%; background: #08080a; }
+      #preboot { position: fixed; inset: 0; display: grid; place-items: center; background: #08080a; }
+      #preboot .pb { display: flex; flex-direction: column; align-items: center; }
+      #preboot .pb-space { height: 97px; }
+      #preboot svg { overflow: visible; }
+      #preboot .s { stroke: #e4e4e7; stroke-width: 6; }
+      #preboot .f { stroke: #55555e; stroke-width: 6; }
+      #preboot .o { stroke: #ff7a1a; stroke-width: 2.6; fill: rgba(255, 122, 26, 0.08); }
+      #preboot .e { stroke: rgba(255, 122, 26, 0.75); stroke-width: 1.5; stroke-dasharray: 2.5 2.5; animation: pf 0.6s linear infinite; }
+      #preboot .g { stroke: rgba(255, 255, 255, 0.18); stroke-width: 1.4; stroke-dasharray: 6 5; animation: pg 0.46s linear infinite; }
+      #preboot .l { transform-box: fill-box; transform-origin: 50% 0; animation: ps 0.46s ease-in-out infinite alternate; }
+      #preboot .l.b { animation-direction: alternate-reverse; }
+      #preboot .body { animation: pb 0.23s ease-in-out infinite alternate; }
+      @keyframes ps { from { transform: rotate(-20deg); } to { transform: rotate(20deg); } }
+      @keyframes pb { to { transform: translateY(-0.9px); } }
+      @keyframes pf { to { stroke-dashoffset: -5; } }
+      @keyframes pg { to { stroke-dashoffset: 11; } }
+      @media (prefers-reduced-motion: reduce) { #preboot * { animation: none !important; } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="preboot" aria-label="Loading Kachua">
+        <div class="pb">
+          <svg width="112" height="75" viewBox="0 0 72 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path class="g" d="M2 45.5 H70" />
+            <path class="f l b" d="M25 34 V40.5" />
+            <path class="f l" d="M49 34 V40.5" />
+            <g class="body">
+              <path d="M12 30.5 L5.5 34 L12 34.5 Z" fill="#e4e4e7" stroke="#e4e4e7" stroke-width="1.5" />
+              <path d="M54 31.5 C57.5 29 59 27.5 61 26.5" stroke="#e4e4e7" stroke-width="5.5" />
+              <ellipse cx="64.2" cy="25" rx="6" ry="4.9" fill="#e4e4e7" />
+              <circle cx="66" cy="23.6" r="1.25" fill="#08080a" />
+              <path class="o" d="M11 34 C11 18.5 21.5 9.5 34 9.5 C46.5 9.5 57 18.5 57 34 Z" />
+              <path class="o" d="M8.5 34 H59.5" />
+              <path class="e" d="M23 27 L34 18 L45 27 M23 27 L34 29.5 L45 27 M34 18 L34 29.5" />
+              <circle cx="23" cy="27" r="2.3" fill="#ececf1" />
+              <circle cx="34" cy="18" r="2.3" fill="#ececf1" />
+              <circle cx="45" cy="27" r="2.3" fill="#ececf1" />
+              <circle cx="34" cy="29.5" r="2.6" fill="#ff7a1a" />
+            </g>
+            <path class="s l" d="M19.5 34.5 V41.5" />
+            <path class="s l b" d="M45.5 34.5 V41.5" />
+          </svg>
+          <div class="pb-space"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
