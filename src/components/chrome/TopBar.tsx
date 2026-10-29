@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Command, FolderOpen, PanelLeftClose, PanelLeftOpen, Share2, Sparkles } from 'lucide-react';
+import { ChevronDown, Command, FolderOpen, PanelLeftClose, PanelLeftOpen, Share2, Sparkles, Search, Ellipsis, ImageDown } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { loadFile, loadSample, setFormat, share } from '../../app/actions';
 import { useStore, type Mode } from '../../core/store';
@@ -19,7 +19,7 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="brand">
-        <button className="icon-btn" onClick={() => set({ editorOpen: !editorOpen })} aria-label={editorOpen ? 'Hide editor' : 'Show editor'} title={`Toggle editor (${isMac ? '⌘' : 'Ctrl'}\\)`}>
+        <button className="icon-btn desk-only" onClick={() => set({ editorOpen: !editorOpen })} aria-label={editorOpen ? 'Hide editor' : 'Show editor'} title={`Toggle editor (${isMac ? '⌘' : 'Ctrl'}\\)`}>
           {editorOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
         </button>
         <Logo />
@@ -33,7 +33,7 @@ export function TopBar() {
 
       <div className="actions">
         <SamplesMenu />
-        <button className="btn ghost" onClick={() => fileRef.current?.click()} title="Open a file">
+        <button className="btn ghost desk-only" onClick={() => fileRef.current?.click()} title="Open a file">
           <FolderOpen size={14} />
           <span className="btn-label">Open</span>
         </button>
@@ -49,14 +49,18 @@ export function TopBar() {
             e.target.value = '';
           }}
         />
-        <button className="btn ghost" onClick={() => void share()} title="Copy share link" data-testid="share">
+        <button className="btn ghost desk-only" onClick={() => void share()} title="Copy share link" data-testid="share">
           <Share2 size={14} />
           <span className="btn-label">Share</span>
         </button>
-        <button className="btn kbd-btn" onClick={() => set({ paletteOpen: true })} data-testid="open-palette" aria-label="Open command palette">
+        <button className="btn kbd-btn desk-only" onClick={() => set({ paletteOpen: true })} data-testid="open-palette" aria-label="Open command palette">
           <Command size={13} />
           <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
         </button>
+        <button className="icon-btn touch-btn mobile-only" onClick={() => set({ paletteOpen: true })} aria-label="Search nodes and actions" data-testid="mobile-search">
+          <Search size={18} />
+        </button>
+        <MoreMenu onOpenFile={() => fileRef.current?.click()} />
       </div>
     </header>
   );
@@ -96,6 +100,70 @@ function FormatSwitch() {
   );
 }
 
+/** Phone overflow menu: samples, open, share and export in one place. */
+function MoreMenu({ onOpenFile }: { onOpenFile: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const requestExport = useStore((s) => s.requestExport);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [open]);
+  const run = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+
+  return (
+    <div className="menu-wrap mobile-only" ref={ref}>
+      <button className="icon-btn touch-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label="More" data-testid="more-btn">
+        <Ellipsis size={18} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="menu glass menu-mobile"
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.2, ease }}
+            role="menu"
+          >
+            <div className="menu-section">Samples</div>
+            {SAMPLES.map((s) => {
+              const v = FORMAT_VISUAL[s.format];
+              const Icon = v.icon;
+              return (
+                <button key={s.id} role="menuitem" className="menu-item" style={{ '--c': v.color } as CSSProperties} onClick={run(() => loadSample(s.id))} data-testid={`more-sample-${s.format}`}>
+                  <span className="menu-glyph">
+                    <Icon size={15} />
+                  </span>
+                  <span className="menu-text">
+                    <b>{s.title}</b>
+                    <span>{FORMAT_LABEL[s.format]}</span>
+                  </span>
+                </button>
+              );
+            })}
+            <div className="menu-sep" />
+            <button role="menuitem" className="menu-item menu-action" onClick={run(onOpenFile)}>
+              <FolderOpen size={16} /> Open a file
+            </button>
+            <button role="menuitem" className="menu-item menu-action" onClick={run(() => void share())}>
+              <Share2 size={16} /> Copy share link
+            </button>
+            <button role="menuitem" className="menu-item menu-action" onClick={run(requestExport)}>
+              <ImageDown size={16} /> Export PNG
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function SamplesMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -107,7 +175,7 @@ function SamplesMenu() {
   }, [open]);
 
   return (
-    <div className="menu-wrap" ref={ref}>
+    <div className="menu-wrap desk-only" ref={ref}>
       <button className="btn ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="samples-btn">
         <Sparkles size={14} />
         <span className="btn-label">Samples</span>

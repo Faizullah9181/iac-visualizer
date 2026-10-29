@@ -48,7 +48,18 @@ export const usesLanes = (format: Graph['format']) => format !== 'ansible';
 
 const isInfra = (g: Graph) => g.format === 'cloudformation' || g.format === 'terraform';
 
-export function layoutGraph(graph: Graph, dir: Direction): { nodes: FlowNode[]; edges: FlowEdge[] } {
+export interface LayoutOptions {
+  /**
+   * The canvas is narrow (phone, tablet, desktop with the editor open): lanes wrap into
+   * at most `maxCols` columns and wire vertically, so the graph scrolls down, not sideways.
+   */
+  narrow?: boolean;
+  maxCols?: number;
+}
+
+export function layoutGraph(graph: Graph, dir: Direction, opts: LayoutOptions = {}): { nodes: FlowNode[]; edges: FlowEdge[] } {
+  const narrow = !!opts.narrow;
+  const maxCols = Math.max(1, opts.maxCols ?? 99);
   const issues = issueIndex(graph);
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const infra = isInfra(graph);
@@ -59,13 +70,20 @@ export function layoutGraph(graph: Graph, dir: Direction): { nodes: FlowNode[]; 
     const to = zoneOf(byId.get(e.target)!);
     fe.data!.bezier = true;
     if (from === 'inputs' || to === 'outputs') fe.data!.quiet = true;
+    if (narrow) Object.assign(fe, { sourceHandle: 'down', targetHandle: 'up' });
     // Chip rows sit above/below the lanes: wire them vertically, not around the lanes.
     if (from === 'inputs' && to !== 'inputs') Object.assign(fe, { sourceHandle: 'down', targetHandle: 'up' });
     if (to === 'outputs' && from !== 'inputs') Object.assign(fe, { sourceHandle: 'down', targetHandle: 'up' });
     return fe;
   });
   const nodes =
-    graph.format === 'otel' ? laneLayout(graph, issues) : infra ? infraLayout(graph, issues) : dagreLayout(graph, dir, issues);
+    graph.format === 'otel'
+      ? narrow
+        ? stackedLaneLayout(graph, issues, maxCols)
+        : laneLayout(graph, issues)
+      : infra
+        ? infraLayout(graph, issues, narrow ? maxCols : 99)
+        : dagreLayout(graph, dir, issues);
   return { nodes, edges };
 }
 
@@ -210,6 +228,64 @@ function laneLayout(graph: Graph, issues: ReturnType<typeof issueIndex>): FlowNo
   return out;
 }
 
+const S_GAP_X = 20;
+const S_GAP_Y = 30;
+
+/**
+ * Narrow-canvas OTel: each pipeline flows top → bottom inside its lane —
+ * receivers row, processor chain, exporters row — and lanes stack vertically.
+ */
+function stackedLaneLayout(graph: Graph, issues: ReturnType<typeof issueIndex>, maxCols: number): FlowNode[] {
+  const out: FlowNode[] = [];
+  const role = (n: GNode) => n.meta?.find(([k]) => k === 'role')?.[1];
+  const rowW = (n: number) => n * NODE_W + (n - 1) * S_GAP_X;
+  const widest = Math.max(1, ...graph.groups.map((g) => Math.min(maxCols, graph.nodes.filter((n) => n.group === g.id && role(n) !== 'processor').length || 1)));
+  const innerW = rowW(Math.min(maxCols, Math.max(widest, 1)));
+  const laneW = innerW + LANE_PAD * 2;
+  let y = 0;
+  let order = 0;
+
+  for (const lane of graph.groups) {
+    const members = graph.nodes.filter((n) => n.group === lane.id);
+    const parent = `lane:${lane.id}`;
+    const children: FlowNode[] = [];
+    let cy = LANE_HEAD;
+    /** Lays out a wrapped, centred row block; returns its height. */
+    const row = (list: GNode[]) => {
+      if (!list.length) return;
+      const per = Math.min(maxCols, list.length);
+      list.forEach((n, i) => {
+        const r = Math.floor(i / per);
+        const inRow = Math.min(per, list.length - r * per);
+        const x = LANE_PAD + (innerW - rowW(inRow)) / 2 + (i % per) * (NODE_W + S_GAP_X);
+        children.push(schemaNode(n, x, cy + r * (NODE_H + S_GAP_X), 'TB', order++, issues, parent));
+      });
+      const rows = Math.ceil(list.length / per);
+      cy += rows * NODE_H + (rows - 1) * S_GAP_X + S_GAP_Y;
+    };
+    if (lane.id === '__extensions') row(members);
+    else {
+      row(members.filter((n) => role(n) === 'receiver'));
+      for (const p of members.filter((n) => role(n) === 'processor')) row([p]);
+      row(members.filter((n) => role(n) === 'exporter'));
+    }
+    const laneH = cy - S_GAP_Y + LANE_PAD;
+    out.push({
+      id: parent,
+      type: 'lane',
+      position: { x: 0, y },
+      width: laneW,
+      height: laneH,
+      style: { width: laneW, height: laneH },
+      data: { group: lane, count: members.length },
+      selectable: false,
+    });
+    out.push(...children);
+    y += laneH + LANE_GAP;
+  }
+  return out;
+}
+
 // ───────────────────────── infra (CloudFormation / Terraform) ─────────────────────────
 
 const INPUT_KINDS = new Set<Kind>(['parameter', 'mapping', 'condition', 'variable', 'local', 'data', 'provider']);
@@ -245,7 +321,7 @@ const CHIP_GAP = 12;
  * Architecture view: one horizontal lane per service family, columns by dependency
  * depth (left = built first). Inputs and outputs sit in compact chip rows top and bottom.
  */
-function infraLayout(graph: Graph, issues: ReturnType<typeof issueIndex>): FlowNode[] {
+function infraLayout(graph: Graph, issues: ReturnType<typeof issueIndex>, maxCols: number): FlowNode[] {
   const core = graph.nodes.filter((n) => zoneOf(n) !== 'inputs' && zoneOf(n) !== 'outputs');
   const coreIds = new Set(core.map((n) => n.id));
 
@@ -266,10 +342,13 @@ function infraLayout(graph: Graph, issues: ReturnType<typeof issueIndex>): FlowN
     return r;
   };
   core.forEach((n) => rankOf(n.id));
-  const cols = Math.max(1, ...core.map((n) => rank.get(n.id)! + 1));
+  const rankCols = Math.max(1, ...core.map((n) => rank.get(n.id)! + 1));
+  // Too many dependency columns for the canvas: wrap each lane, still in dependency order.
+  const wrap = rankCols > maxCols;
+  const cols = wrap ? maxCols : rankCols;
   const colX = (c: number) => I_PAD + c * (NODE_W + I_COL_GAP);
   const coreW = cols * NODE_W + (cols - 1) * I_COL_GAP;
-  const perRow = Math.max(4, Math.floor((coreW + CHIP_GAP) / (CHIP_W + CHIP_GAP)));
+  const perRow = Math.max(wrap ? 1 : 4, Math.floor((coreW + CHIP_GAP) / (CHIP_W + CHIP_GAP)));
   const laneW = Math.max(coreW, perRow * (CHIP_W + CHIP_GAP) - CHIP_GAP) + I_PAD * 2;
 
   // Chips line up under/over the column of the resources they touch.
@@ -315,6 +394,18 @@ function infraLayout(graph: Graph, issues: ReturnType<typeof issueIndex>): FlowN
         out.push(
           schemaNode(n, I_PAD + (i % perRow) * (CHIP_W + CHIP_GAP), I_HEAD + Math.floor(i / perRow) * (CHIP_H + I_ROW_GAP), 'LR', order++, issues, parent, true),
         ),
+      );
+      y += h + I_LANE_GAP;
+      continue;
+    }
+
+    if (wrap) {
+      const sorted = [...members].sort((a, b) => rank.get(a.id)! - rank.get(b.id)! || (a.line ?? 0) - (b.line ?? 0));
+      const rows = Math.ceil(sorted.length / cols);
+      const h = I_HEAD + rows * NODE_H + (rows - 1) * I_ROW_GAP + I_PAD;
+      lane(zone, members, h);
+      sorted.forEach((n, i) =>
+        out.push(schemaNode(n, colX(i % cols), I_HEAD + Math.floor(i / cols) * (NODE_H + I_ROW_GAP), 'LR', order++, issues, parent)),
       );
       y += h + I_LANE_GAP;
       continue;

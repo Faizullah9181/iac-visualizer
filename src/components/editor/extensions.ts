@@ -81,7 +81,7 @@ const highlight = HighlightStyle.define([
 
 const theme = EditorView.theme(
   {
-    '&': { backgroundColor: 'transparent', color: '#d4d4d8', height: '100%', fontSize: '12.5px' },
+    '&': { backgroundColor: 'transparent', color: '#d4d4d8', height: '100%', fontSize: 'var(--editor-fs, 12.5px)' },
     '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: '1.7', overflow: 'auto' },
     '.cm-content': { caretColor: 'var(--accent)', padding: '14px 0 40vh' },
     '.cm-cursor': { borderLeftColor: 'var(--accent)', borderLeftWidth: '2px' },

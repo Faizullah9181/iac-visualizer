@@ -14,6 +14,8 @@ export function App() {
   const editorOpen = useStore((s) => s.editorOpen);
   const mobileView = useStore((s) => s.mobileView);
   const set = useStore((s) => s.set);
+  const problems = useStore((s) => (s.graph?.diagnostics.filter((d) => d.severity !== 'info').length ?? 0) + (s.error ? 1 : 0));
+  const hasErrors = useStore((s) => !!s.error || !!s.graph?.diagnostics.some((d) => d.severity === 'error'));
 
   return (
     <div className="app" data-editor={editorOpen} data-mobile-view={mobileView}>
@@ -30,12 +32,15 @@ export function App() {
           <Canvas />
         </section>
       </main>
-      <nav className="mobile-switch" aria-label="View">
-        <button data-active={mobileView === 'editor'} onClick={() => set({ mobileView: 'editor', editorOpen: true })}>
-          <Code2 size={14} /> Source
+      <nav className="tabbar" aria-label="View">
+        <button data-active={mobileView === 'editor'} aria-current={mobileView === 'editor'} onClick={() => set({ mobileView: 'editor', editorOpen: true })}>
+          <Code2 size={18} />
+          <span>Source</span>
+          {problems > 0 && <i className="tab-badge" data-sev={hasErrors ? 'error' : 'warning'}>{problems}</i>}
         </button>
-        <button data-active={mobileView === 'graph'} onClick={() => set({ mobileView: 'graph' })}>
-          <Waypoints size={14} /> Graph
+        <button data-active={mobileView === 'graph'} aria-current={mobileView === 'graph'} onClick={() => set({ mobileView: 'graph' })}>
+          <Waypoints size={18} />
+          <span>Graph</span>
         </button>
       </nav>
       <StatusBar />

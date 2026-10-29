@@ -43,6 +43,24 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
+/** Canvas width, bucketed into what the layout cares about. */
+function useCanvasSize() {
+  const [size, setSize] = useState({ w: 1200, h: 800 });
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('.canvas');
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Narrow canvases wrap lanes into as many columns as fit at a readable (~0.88) zoom.
+  const narrow = size.w < 820;
+  const maxCols = narrow ? Math.max(1, Math.floor((size.w / 0.88 - 24 + 56) / (228 + 56))) : 99;
+  return { ...size, narrow, maxCols };
+}
+
+const canHover = () => window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? true;
+
 function CanvasInner() {
   const rf = useReactFlow();
   const graph = useStore((s) => s.graph);
@@ -58,9 +76,16 @@ function CanvasInner() {
   const select = useStore((s) => s.select);
   const notify = useStore((s) => s.notify);
   const reducedMotion = usePrefersReducedMotion();
+  const canvas = useCanvasSize();
+  const narrowRef = useRef(canvas.narrow);
+  narrowRef.current = canvas.narrow;
 
   const view = useMemo(() => (graph ? filterGraph(graph, hiddenKinds) : null), [graph, hiddenKinds]);
-  const layout = useMemo(() => (view ? layoutGraph(view, direction) : { nodes: [], edges: [] }), [view, direction]);
+  const { narrow, maxCols } = canvas;
+  const layout = useMemo(
+    () => (view ? layoutGraph(view, direction, { narrow, maxCols }) : { nodes: [], edges: [] }),
+    [view, direction, narrow, maxCols],
+  );
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(layout.nodes);
   useEffect(() => setNodes(layout.nodes), [layout, setNodes]);
@@ -90,12 +115,21 @@ function CanvasInner() {
     const el = document.querySelector<HTMLElement>('.canvas .react-flow');
     if (!all.length || !el) return;
     const b = rf.getNodesBounds(all);
-    const pad = 32;
+    const W = el.clientWidth;
+    const pad = W < 520 ? 14 : 32;
     const top = 64; // clear the HUD
-    const fitZoom = Math.min((el.clientWidth - pad * 2) / b.width, (el.clientHeight - top - pad) / b.height);
+    const zoomW = (W - pad * 2) / b.width;
+    const fitZoom = Math.min(zoomW, (el.clientHeight - top - pad) / b.height);
     const MIN = 0.6;
-    if (fitZoom >= MIN) void rf.fitView({ padding: 0.14, duration: 650, maxZoom: 1.1 });
-    else void rf.setViewport({ x: pad - b.x * MIN, y: top - b.y * MIN, zoom: MIN }, { duration: 650 });
+    if (fitZoom >= MIN) {
+      void rf.fitView({ padding: 0.14, duration: 650, maxZoom: 1.1 });
+      return;
+    }
+    // Too tall/wide to fit legibly: on narrow canvases fit the width and scroll down like a
+    // page; elsewhere hold a readable zoom anchored at the top-left.
+    const z = narrowRef.current ? Math.min(1.1, Math.max(MIN, zoomW)) : MIN;
+    const x = b.width * z < W - pad * 2 ? (W - b.width * z) / 2 - b.x * z : pad - b.x * z;
+    void rf.setViewport({ x, y: top - b.y * z, zoom: z }, { duration: 650 });
   }, [rf]);
 
   // Re-frame when the graph's structure (or direction) changes — not on every keystroke.
@@ -103,7 +137,7 @@ function CanvasInner() {
     if (!layout.nodes.length) return;
     const t = setTimeout(frame, 60);
     return () => clearTimeout(t);
-  }, [signature, direction]);
+  }, [signature, direction, narrow, maxCols]);
 
   useEffect(() => {
     if (fit) frame();
@@ -114,7 +148,10 @@ function CanvasInner() {
     const n = rf.getInternalNode(focus.id);
     if (!n) return;
     const { x, y } = n.internals.positionAbsolute;
-    void rf.setCenter(x + (n.measured.width ?? 0) / 2, y + (n.measured.height ?? 0) / 2, { zoom: Math.max(rf.getZoom(), 1.05), duration: 700 });
+    const zoom = Math.max(rf.getZoom(), narrowRef.current ? 0.9 : 1.05);
+    // On narrow canvases the inspector is a bottom sheet: centre the node in the space above it.
+    const sheet = narrowRef.current && useStore.getState().selectedId ? (document.querySelector('.canvas')!.clientHeight * 0.3) / zoom : 0;
+    void rf.setCenter(x + (n.measured.width ?? 0) / 2, y + (n.measured.height ?? 0) / 2 + sheet, { zoom, duration: 700 });
   }, [focus, rf]);
 
   useEffect(() => {
@@ -172,7 +209,7 @@ function CanvasInner() {
 
   const onNodeClick: NodeMouseHandler<FlowNode> = (_, n) => {
     if (n.type !== 'schema') return;
-    select(n.id, { reveal: true });
+    select(n.id, { reveal: true, focus: narrowRef.current });
   };
 
   return (
@@ -184,12 +221,17 @@ function CanvasInner() {
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onNodeClick={onNodeClick}
-        onNodeMouseEnter={(_, n) => n.type === 'schema' && set({ hoveredId: n.id })}
+        // Touch screens fire emulated mouseenter on tap and never leave: hover is mouse-only.
+        onNodeMouseEnter={(_, n) => n.type === 'schema' && canHover() && set({ hoveredId: n.id })}
         onNodeMouseLeave={() => set({ hoveredId: null })}
-        onPaneClick={() => select(null)}
+        onPaneClick={() => {
+          select(null);
+          set({ hoveredId: null });
+        }}
         nodesConnectable={false}
         edgesFocusable={false}
         minZoom={0.15}
+        zoomOnDoubleClick={false}
         maxZoom={2.5}
         proOptions={{ hideAttribution: true }}
         className={reducedMotion ? 'reduced-motion' : ''}

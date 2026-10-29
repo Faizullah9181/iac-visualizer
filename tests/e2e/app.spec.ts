@@ -389,18 +389,111 @@ test.describe('seo', () => {
   });
 });
 
-test.describe('mobile', () => {
-  test.use({ viewport: { width: 390, height: 844 } });
-  test('switches between source and graph', async ({ page }) => {
+test.describe('phone (touch)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  async function openSample(page: Page, format: string, label: string) {
+    await page.getByTestId('more-btn').tap();
+    await page.getByTestId(`more-sample-${format}`).tap();
+    await expect(page.getByTestId('hud')).toContainText(label);
+    await page.waitForTimeout(900); // framing animation
+  }
+
+  test('switches between source and graph with the tab bar', async ({ page }) => {
     await boot(page);
+    const tabs = page.locator('.tabbar');
     await expect(page.getByTestId('editor')).toBeHidden();
-    await page.getByRole('button', { name: 'Source' }).click();
+    await expect(page.getByTestId('statusbar')).toBeHidden();
+    await tabs.getByRole('button', { name: /Source/ }).tap();
     await expect(page.getByTestId('editor')).toBeVisible();
     await expect(page.getByTestId('canvas')).toBeHidden();
-    await page.getByRole('button', { name: 'Graph' }).click();
+    await expect(tabs.locator('.tab-badge')).toHaveText('1'); // OTel sample: one warning
+    await tabs.getByRole('button', { name: /Graph/ }).tap();
     await expect(page.getByTestId('canvas')).toBeVisible();
-    // no horizontal page scroll
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test('infra lanes wrap to the screen width instead of scrolling sideways', async ({ page }) => {
+    await boot(page);
+    await openSample(page, 'cloudformation', 'CloudFormation');
+    for (const id of ['r:ItemsTable', 'r:ApiFunction', 'r:HttpApi', 'r:ErrorAlarm']) {
+      const box = (await node(page, id).boundingBox())!;
+      expect(box.x, id).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, id).toBeLessThanOrEqual(390);
+    }
+  });
+
+  test('tapping a node opens a bottom sheet and keeps the node visible above it', async ({ page }) => {
+    await boot(page);
+    await openSample(page, 'cloudformation', 'CloudFormation');
+    await node(page, 'r:HttpApi').tap();
+    const sheet = page.getByTestId('inspector');
+    await expect(sheet).toBeVisible();
+    await expect(page.getByTestId('inspector-title')).toHaveText('HttpApi');
+    await page.waitForTimeout(900); // centring animation
+    const s = (await sheet.boundingBox())!;
+    const n = (await node(page, 'r:HttpApi').boundingBox())!;
+    expect(s.width).toBeGreaterThan(340); // full-width sheet, not a side panel
+    expect(n.y + n.height).toBeLessThanOrEqual(s.y);
+    expect(n.y).toBeGreaterThan(0);
+  });
+
+  test('a tap does not leave a stuck hover highlight', async ({ page }) => {
+    await boot(page);
+    await openSample(page, 'cloudformation', 'CloudFormation');
+    await node(page, 'r:HttpApi').tap();
+    await expect(page.locator('[data-state="dim"]').first()).toBeAttached();
+    await page.getByTestId('inspector').getByRole('button', { name: 'Close inspector' }).tap();
+    await page.locator('.react-flow__pane').tap({ position: { x: 20, y: 600 } });
+    await expect(page.locator('.snode[data-state="dim"]')).toHaveCount(0);
+  });
+
+  test('search opens the command palette', async ({ page }) => {
+    await boot(page);
+    await page.getByTestId('mobile-search').tap();
+    await expect(page.getByTestId('palette')).toBeVisible();
+  });
+
+  test('OpenTelemetry pipelines flow top to bottom', async ({ page }) => {
+    await boot(page);
+    const a = (await node(page, 'traces::receivers::otlp').boundingBox())!;
+    const b = (await node(page, 'traces::processors::memory_limiter').boundingBox())!;
+    expect(b.y).toBeGreaterThan(a.y + a.height);
+    expect(a.x + a.width).toBeLessThanOrEqual(390);
+  });
+});
+
+test.describe('tablet & desktop sizes', () => {
+  test('tablet portrait fits the whole CloudFormation stack across', async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await boot(page);
+    await page.getByTestId('more-btn').click();
+    await page.getByTestId('more-sample-cloudformation').click();
+    await expect(page.getByTestId('hud')).toContainText('CloudFormation');
+    await page.waitForTimeout(900);
+    const right = await page.getByTestId('graph-node').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)));
+    expect(right).toBeLessThanOrEqual(768);
+  });
+
+  test('a narrow canvas next to the editor uses the bottom sheet and hides the toolbar', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await boot(page);
+    await loadSample(page, 'cloudformation');
+    await expect(page.getByTestId('hud')).toContainText('CloudFormation');
+    await page.waitForTimeout(900);
+    await node(page, 'r:ItemsTable').click();
+    await expect(page.getByTestId('inspector')).toBeVisible();
+    await expect(page.locator('.toolbar')).toBeHidden();
+    await expect(page.locator('.minimap')).toBeHidden();
+  });
+
+  test('large screens get a roomier editor', async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1440 });
+    await boot(page);
+    const size = await page.locator('.cm-editor').evaluate((el) => getComputedStyle(el).fontSize);
+    expect(size).toBe('14.5px');
+    const editorW = (await page.getByTestId('editor').boundingBox())!.width;
+    expect(editorW).toBeGreaterThan(500);
   });
 });
